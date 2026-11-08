@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f5f6f8">
+<title>日期数字计算器</title>
+<style>
+:root{color-scheme:light;--ink:#20242b;--muted:#707782;--line:#e4e7ec;--surface:#fff;--page:#f5f6f8;--accent:#315efb;--soft:#edf1ff}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;padding:32px 16px;display:grid;place-items:center;background:var(--page);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.app{width:min(100%,480px)}
+.eyebrow{margin:0 0 10px;color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.12em}
+h1{margin:0;font-size:clamp(25px,6vw,32px);letter-spacing:-.04em}
+.intro{margin:9px 0 22px;color:var(--muted);line-height:1.65;font-size:14px}
+.panel{padding:22px;border:1px solid var(--line);border-radius:18px;background:var(--surface);box-shadow:0 12px 35px rgba(25,35,55,.06)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.field{min-width:0}.full{grid-column:1/-1}
+label{display:block;margin:0 0 7px;color:#4d5561;font-size:13px;font-weight:650}
+input{display:block;width:100%;height:46px;padding:0 12px;border:1px solid #d8dde5;border-radius:10px;outline:none;background:#fff;color:var(--ink);font:inherit;font-size:16px}
+input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(49,94,251,.12)}
+.note{margin:6px 0 0;color:var(--muted);font-size:11px}
+.result{margin-top:20px;padding:19px;border-radius:14px;background:var(--soft);text-align:center}
+.result-label{margin:0;color:#52618c;font-size:12px;font-weight:700;letter-spacing:.08em}
+output{display:block;margin:5px 0 4px;color:#2448d8;font-size:54px;line-height:1.1;font-weight:750;letter-spacing:.12em;font-variant-numeric:tabular-nums}
+.calculation{min-height:20px;color:#64708e;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.actions{display:flex;gap:10px;margin-top:16px}
+button{min-height:44px;padding:0 15px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit;font-size:14px;font-weight:650;cursor:pointer}
+button.primary{flex:1;border-color:var(--accent);background:var(--accent);color:white}
+button:active{transform:translateY(1px)}
+.formula{margin:17px 2px 0;color:var(--muted);font-size:12px;line-height:1.7}
+.formula code{color:#46516a;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.toast{min-height:18px;margin:9px 0 0;color:#28764b;text-align:center;font-size:12px}
+@media(max-width:390px){.panel{padding:17px}.grid{gap:11px}.actions{flex-direction:column}button.primary{flex:auto}}
+</style>
+</head>
+<body>
+<main class="app">
+  <p class="eyebrow">DATE NUMBER TOOL</p>
+  <h1>日期数字计算器</h1>
+  <p class="intro">调整日期、权重和密钥，实时查看计算结果。结果固定显示为两位数字。</p>
+  <section class="panel" aria-label="计算参数">
+    <div class="grid">
+      <div class="field full">
+        <label for="date">计算日期</label>
+        <input id="date" type="date">
+      </div>
+      <div class="field">
+        <label for="dayWeight">日期权重（D）</label>
+        <input id="dayWeight" type="number" inputmode="numeric" min="0" max="999" step="1" value="7">
+        <p class="note">默认 7</p>
+      </div>
+      <div class="field">
+        <label for="monthWeight">月份权重（M）</label>
+        <input id="monthWeight" type="number" inputmode="numeric" min="0" max="999" step="1" value="11">
+        <p class="note">默认 11</p>
+      </div>
+      <div class="field full">
+        <label for="key">固定密钥（K）</label>
+        <input id="key" type="number" inputmode="numeric" min="0" max="999999" step="1" value="62">
+        <p class="note">示例值 62，可自行修改</p>
+      </div>
+    </div>
+    <div class="result" aria-live="polite">
+      <p class="result-label">计算结果 · 后两位</p>
+      <output id="suffix">--</output>
+      <div class="calculation" id="calculation">输入参数后自动计算</div>
+    </div>
+    <div class="actions">
+      <button class="primary" id="copyButton" type="button">复制结果</button>
+      <button id="todayButton" type="button">使用今天</button>
+    </div>
+    <p class="toast" id="message" aria-live="polite"></p>
+  </section>
+  <p class="formula">
+    计算方式：<code>B = (D × 日期权重 + M × 月份权重 + K) mod 100</code>。<br>
+    其中 D 为日、M 为月份；结果不足两位时自动在前面补 0。
+  </p>
+</main>
+<script>
+const dateInput=document.getElementById('date');
+const dayWeightInput=document.getElementById('dayWeight');
+const monthWeightInput=document.getElementById('monthWeight');
+const keyInput=document.getElementById('key');
+const suffixOutput=document.getElementById('suffix');
+const calculation=document.getElementById('calculation');
+const message=document.getElementById('message');
+
+function localDateString(date=new Date()){
+  const y=date.getFullYear();
+  const m=String(date.getMonth()+1).padStart(2,'0');
+  const d=String(date.getDate()).padStart(2,'0');
+  return `${y}-${m}-${d}`;
+}
+function integerValue(input){
+  const value=Number(input.value);
+  return Number.isFinite(value)?Math.trunc(value):0;
+}
+function calculate(){
+  if(!dateInput.value){
+    suffixOutput.textContent='--';
+    calculation.textContent='请选择有效日期';
+    return null;
+  }
+  const [,month,day]=dateInput.value.split('-').map(Number);
+  const dw=integerValue(dayWeightInput);
+  const mw=integerValue(monthWeightInput);
+  const key=integerValue(keyInput);
+  const raw=day*dw+month*mw+key;
+  const result=((raw%100)+100)%100;
+  const formatted=String(result).padStart(2,'0');
+  suffixOutput.textContent=formatted;
+  calculation.textContent=`${day} × ${dw} + ${month} × ${mw} + ${key} = ${raw}；取模 100`;
+  return formatted;
+}
+[dateInput,dayWeightInput,monthWeightInput,keyInput].forEach(el=>{
+  el.addEventListener('input',calculate);
+  el.addEventListener('change',calculate);
+});
+document.getElementById('todayButton').addEventListener('click',()=>{
+  dateInput.value=localDateString();
+  message.textContent='已切换为设备今天的日期';
+  calculate();
+});
+document.getElementById('copyButton').addEventListener('click',async()=>{
+  const value=calculate();
+  if(value===null)return;
+  try{
+    await navigator.clipboard.writeText(value);
+    message.textContent='已复制：'+value;
+  }catch{
+    message.textContent='复制不可用，请手动选择结果';
+  }
+});
+dateInput.value=localDateString();
+calculate();
+</script>
+</body>
+</html>
